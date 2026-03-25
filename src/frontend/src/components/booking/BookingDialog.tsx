@@ -1,0 +1,375 @@
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Hash,
+  IndianRupee,
+  Loader2,
+  MapPin,
+  Stethoscope,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { useStore } from "../../context/StoreContext";
+import {
+  SESSION_TIMES,
+  getAvailableDates,
+  isSessionAvailable,
+  makeSessionId,
+} from "../../data/seed";
+import type { Doctor, Hospital, SessionType } from "../../types";
+
+interface Props {
+  doctor: Doctor;
+  hospital: Hospital;
+  open: boolean;
+  onClose: () => void;
+}
+
+type Step = "date" | "session" | "token" | "payment" | "success";
+
+export default function BookingDialog({
+  doctor,
+  hospital,
+  open,
+  onClose,
+}: Props) {
+  const { user, bookings, addBooking, bookToken } = useStore();
+  const [step, setStep] = useState<Step>("date");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSession, setSelectedSession] = useState<SessionType | "">("");
+  const [paying, setPaying] = useState(false);
+  const [tokenNumber, setTokenNumber] = useState(0);
+
+  const availableDates = useMemo(() => getAvailableDates(), []);
+
+  function getBookedCount(date: string, session: string): number {
+    const sid = makeSessionId(doctor.id, date, session);
+    return bookings.filter((b) => b.sessionId === sid && b.paymentDone).length;
+  }
+
+  function handleDateSelect(date: string) {
+    setSelectedDate(date);
+    setStep("session");
+  }
+
+  function handleSessionSelect(session: SessionType) {
+    setSelectedSession(session);
+    const count = getBookedCount(selectedDate, session);
+    setTokenNumber(count + 1);
+    setStep("token");
+  }
+
+  function handleConfirm() {
+    setStep("payment");
+  }
+
+  function handlePay() {
+    setPaying(true);
+    setTimeout(() => {
+      const patientUser = user as { id: string; name: string };
+      const sessionId = makeSessionId(doctor.id, selectedDate, selectedSession);
+      const id = `bk_${Date.now()}`;
+      addBooking({
+        id,
+        patientId: patientUser.id,
+        patientName: patientUser.name,
+        doctorId: doctor.id,
+        doctorName: doctor.name,
+        hospitalName: hospital.name,
+        date: selectedDate,
+        session: selectedSession as SessionType,
+        tokenNumber,
+        sessionId,
+        paymentDone: true,
+        status: "confirmed",
+      });
+      bookToken(
+        sessionId,
+        doctor.id,
+        selectedDate,
+        selectedSession as SessionType,
+        tokenNumber,
+      );
+      setPaying(false);
+      setStep("success");
+    }, 1800);
+  }
+
+  function handleClose() {
+    setStep("date");
+    setSelectedDate("");
+    setSelectedSession("");
+    setTokenNumber(0);
+    onClose();
+  }
+
+  function formatDate(d: string) {
+    return new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+  }
+
+  function getDayName(d: string) {
+    return new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", {
+      weekday: "short",
+    });
+  }
+  function getDayNum(d: string) {
+    return new Date(`${d}T00:00:00`).getDate();
+  }
+  function getMonth(d: string) {
+    return new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", {
+      month: "short",
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md" data-ocid="booking.dialog">
+        <DialogHeader>
+          <DialogTitle className="text-center">
+            {step === "success" ? "Booking Confirmed!" : "Book Appointment"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Step: Date */}
+        {step === "date" && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                1. Select Date
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {availableDates.map((date, i) => (
+                  <button
+                    key={date}
+                    type="button"
+                    onClick={() => handleDateSelect(date)}
+                    className={`flex flex-col items-center px-4 py-3 rounded-xl border-2 shrink-0 transition-all ${"border-gray-200 hover:border-teal-300 hover:bg-teal-50"}`}
+                    data-ocid="booking.button"
+                  >
+                    <span className="text-xs text-gray-500">
+                      {getDayName(date)}
+                    </span>
+                    <span className="text-xl font-bold text-gray-900">
+                      {getDayNum(date)}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {getMonth(date)}
+                    </span>
+                    {i === 0 && (
+                      <span className="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full mt-1">
+                        Today
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Session */}
+        {step === "session" && (
+          <div className="space-y-3">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                2. Select Session
+              </p>
+              <p className="text-xs text-gray-400 mb-3">
+                {formatDate(selectedDate)}
+              </p>
+              <div className="space-y-2">
+                {(Object.keys(SESSION_TIMES) as SessionType[]).map(
+                  (session) => {
+                    if (!doctor.sessions.includes(session)) return null;
+                    const available = isSessionAvailable(selectedDate, session);
+                    const booked = getBookedCount(selectedDate, session);
+                    const full = booked >= doctor.tokensPerSession;
+                    return (
+                      <button
+                        key={session}
+                        type="button"
+                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+                          !available || full
+                            ? "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                            : "border-gray-200 hover:border-teal-500 hover:bg-teal-50"
+                        }`}
+                        disabled={!available || full}
+                        onClick={() => handleSessionSelect(session)}
+                        data-ocid="booking.button"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium text-sm">
+                              {SESSION_TIMES[session].label}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full ${
+                              full
+                                ? "bg-red-100 text-red-600"
+                                : !available
+                                  ? "bg-gray-100 text-gray-500"
+                                  : "bg-teal-100 text-teal-700"
+                            }`}
+                          >
+                            {full
+                              ? "Full"
+                              : !available
+                                ? "Ended"
+                                : `${booked} / ${doctor.tokensPerSession} Booked`}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Token preview */}
+        {step === "token" && (
+          <div className="space-y-4">
+            <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-teal-600 font-semibold uppercase tracking-wide">
+                    Your Token
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">{doctor.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {formatDate(selectedDate)} ·{" "}
+                    {SESSION_TIMES[selectedSession as SessionType]?.label}
+                  </p>
+                  <div className="flex items-center gap-1 mt-2 text-gray-700 font-semibold">
+                    <IndianRupee className="w-3.5 h-3.5 text-teal-600" />
+                    {doctor.price}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleConfirm}
+                  className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-full text-sm font-semibold transition-colors"
+                  data-ocid="booking.confirm_button"
+                >
+                  Generate Token →
+                </button>
+              </div>
+            </div>
+            <div className="border-2 border-teal-300 rounded-xl p-6 text-center">
+              <Hash className="w-6 h-6 text-teal-500 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Your Token Number</p>
+              <p className="text-6xl font-bold text-teal-600 mt-1">
+                {tokenNumber}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Payment */}
+        {step === "payment" && (
+          <div className="space-y-4 text-center">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-sm text-gray-500 mb-1">Amount to Pay</p>
+              <div className="flex items-center justify-center gap-1 text-3xl font-bold text-gray-900">
+                <IndianRupee className="w-6 h-6" />
+                {doctor.price}
+              </div>
+            </div>
+            {paying ? (
+              <div className="py-4">
+                <Loader2 className="w-8 h-8 animate-spin text-teal-500 mx-auto mb-3" />
+                <p className="text-sm font-medium">Processing Payment...</p>
+                <p className="text-xs text-gray-400 mt-1">Please wait</p>
+              </div>
+            ) : (
+              <Button
+                className="w-full text-base h-12 bg-teal-500 hover:bg-teal-600 rounded-full"
+                onClick={handlePay}
+                data-ocid="booking.primary_button"
+              >
+                <IndianRupee className="w-4 h-4 mr-1" />
+                Pay ₹{doctor.price}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Step: Success */}
+        {step === "success" && (
+          <div className="text-center" data-ocid="booking.success_state">
+            {/* Green top band */}
+            <div className="h-16 bg-green-500 rounded-t-2xl -mx-6 -mt-2 mb-0 relative flex items-end justify-center pb-0">
+              <div className="w-16 h-16 bg-white border-4 border-green-500 rounded-full flex items-center justify-center translate-y-8 shadow-md">
+                <CheckCircle2 className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+            <div className="mt-12 space-y-3">
+              <h2 className="text-xl font-bold text-gray-900">
+                Booking Confirmed!
+              </h2>
+              <p className="text-xs font-semibold text-teal-600 tracking-widest uppercase">
+                Your Token Number
+              </p>
+              <p className="text-6xl font-bold text-gray-900">{tokenNumber}</p>
+              <div className="grid grid-cols-2 gap-3 text-sm text-left mt-4">
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Stethoscope className="w-4 h-4 text-teal-500 shrink-0" />
+                  <span>{doctor.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-500">
+                  <MapPin className="w-4 h-4 text-teal-500 shrink-0" />
+                  <span>{hospital.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Calendar className="w-4 h-4 text-teal-500 shrink-0" />
+                  <span>{formatDate(selectedDate)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Clock className="w-4 h-4 text-teal-500 shrink-0" />
+                  <span>
+                    {SESSION_TIMES[selectedSession as SessionType]?.label}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-full"
+                  onClick={handleClose}
+                  data-ocid="booking.close_button"
+                >
+                  Back to Home
+                </Button>
+                <Button
+                  className="flex-1 bg-teal-500 hover:bg-teal-600 rounded-full"
+                  onClick={() => {
+                    handleClose();
+                    toast.success("Navigate to My Bookings to track!");
+                  }}
+                  data-ocid="booking.secondary_button"
+                >
+                  Track Queue Live
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
