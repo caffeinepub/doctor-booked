@@ -4,6 +4,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Activity,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   Lock,
@@ -15,32 +17,72 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { useStore } from "../context/StoreContext";
-import { ADMIN_CODE } from "../data/seed";
+import { ADMIN_CODE, ADMIN_PASSWORD } from "../data/seed";
 import { useRouter } from "../router/RouterContext";
 
 export default function LoginPage() {
-  const { login, doctors } = useStore();
+  const {
+    login,
+    doctors,
+    getPatientCredentials,
+    getPatientNameIndex,
+    savePatientCredential,
+  } = useStore();
   const { navigate } = useRouter();
 
   const [patientEmail, setPatientEmail] = useState("");
   const [patientPassword, setPatientPassword] = useState("");
   const [patientName, setPatientName] = useState("");
   const [doctorCode, setDoctorCode] = useState("");
+  const [doctorPassword, setDoctorPassword] = useState("");
   const [adminCode, setAdminCode] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   function handlePatientLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!patientEmail || !patientPassword || !patientName) {
+    const name = patientName.trim();
+    const email = patientEmail.trim().toLowerCase();
+    const password = patientPassword;
+
+    if (!name || !email || !password) {
       toast.error("Please fill all fields");
       return;
     }
+
+    const credentials = getPatientCredentials();
+    const nameIndex = getPatientNameIndex();
+
+    // Check name uniqueness: same name used by a different email?
+    const nameOwner = nameIndex[name.toLowerCase()];
+    if (nameOwner && nameOwner !== email) {
+      toast.error("This name is already taken");
+      return;
+    }
+
+    const existing = credentials[email];
+    if (existing) {
+      // Email already registered — verify name and password
+      if (existing.name !== name) {
+        toast.error("Name does not match the registered name for this email");
+        return;
+      }
+      if (existing.password !== password) {
+        toast.error("Incorrect password");
+        return;
+      }
+    } else {
+      // New registration — save credentials
+      savePatientCredential(email, name, password);
+    }
+
     setLoading(true);
     setTimeout(() => {
       login({
-        id: `p_${patientEmail}`,
-        email: patientEmail,
-        name: patientName,
+        id: `p_${email}`,
+        email,
+        name,
         role: "patient",
       });
       setLoading(false);
@@ -50,12 +92,29 @@ export default function LoginPage() {
 
   function handleDoctorLogin(e: React.FormEvent) {
     e.preventDefault();
-    // Check live doctors list (includes admin-added doctors)
+    if (!doctorCode) {
+      toast.error("Please enter your doctor code");
+      return;
+    }
+    if (!doctorPassword) {
+      toast.error("Please enter your phone number as password");
+      return;
+    }
     const doctor = doctors.find(
-      (d) => d.code && d.code.toUpperCase() === doctorCode.toUpperCase(),
+      (d) => d.code && d.code.toUpperCase() === doctorCode.trim().toUpperCase(),
     );
     if (!doctor) {
-      toast.error("Invalid access code. Try DOC001, DOC002, or DOC003");
+      toast.error("Invalid access code. Please check with your admin.");
+      return;
+    }
+    const registeredPhone =
+      (doctor as any).phone || (doctor as any).contactPhone || "";
+    if (!registeredPhone) {
+      toast.error("No phone number set for this doctor. Contact admin.");
+      return;
+    }
+    if (doctorPassword.trim() !== registeredPhone.trim()) {
+      toast.error("Incorrect password. Use your registered phone number.");
       return;
     }
     setLoading(true);
@@ -73,12 +132,16 @@ export default function LoginPage() {
 
   function handleAdminLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!adminCode) {
-      toast.error("Please enter admin code");
+    if (!adminCode || !adminPassword) {
+      toast.error("Please enter admin code and password");
       return;
     }
     if (adminCode.toUpperCase() !== ADMIN_CODE) {
       toast.error("Invalid admin code");
+      return;
+    }
+    if (adminPassword !== ADMIN_PASSWORD) {
+      toast.error("Invalid admin password");
       return;
     }
     setLoading(true);
@@ -92,9 +155,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
             <Stethoscope className="w-4 h-4 text-white" />
           </div>
           <span className="text-base">
@@ -104,11 +167,11 @@ export default function LoginPage() {
         </div>
       </header>
 
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
+      <div className="flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
         <div className="w-full max-w-4xl">
           <Tabs defaultValue="patient" className="w-full">
             <TabsList
-              className="grid w-full max-w-sm mx-auto grid-cols-3 mb-8"
+              className="grid w-full max-w-sm mx-auto grid-cols-3 mb-6 sm:mb-8"
               data-ocid="login.tab"
             >
               <TabsTrigger value="patient" data-ocid="login.tab">
@@ -124,9 +187,9 @@ export default function LoginPage() {
 
             {/* Patient tab */}
             <TabsContent value="patient">
-              <div className="flex max-w-3xl mx-auto rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-                {/* Left panel */}
-                <div className="w-1/2 bg-gradient-to-b from-teal-200 to-teal-500 flex items-end pb-10 px-8">
+              <div className="flex flex-col sm:flex-row max-w-3xl mx-auto rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+                {/* Left panel — hidden on mobile */}
+                <div className="hidden sm:flex sm:w-2/5 bg-gradient-to-b from-teal-200 to-teal-500 items-end pb-10 px-8 min-h-[280px]">
                   <div>
                     <h2 className="text-2xl font-bold text-white leading-tight mb-2">
                       Your Health,
@@ -139,9 +202,18 @@ export default function LoginPage() {
                     </p>
                   </div>
                 </div>
-                {/* Right panel */}
-                <div className="w-1/2 bg-white p-8">
-                  <div className="mb-6">
+                {/* Mobile top banner */}
+                <div className="sm:hidden bg-gradient-to-r from-teal-400 to-teal-600 px-6 py-5">
+                  <h2 className="text-lg font-bold text-white">
+                    Patient Portal
+                  </h2>
+                  <p className="text-teal-50 text-xs mt-0.5">
+                    Book appointments &amp; track your token
+                  </p>
+                </div>
+                {/* Right panel / Form */}
+                <div className="flex-1 bg-white p-6 sm:p-8">
+                  <div className="mb-5 hidden sm:block">
                     <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center mb-4">
                       <Activity className="w-6 h-6 text-teal-600" />
                     </div>
@@ -208,7 +280,7 @@ export default function LoginPage() {
                     </div>
                     <Button
                       type="submit"
-                      className="w-full bg-teal-500 hover:bg-teal-600 rounded-full h-10"
+                      className="w-full bg-teal-500 hover:bg-teal-600 rounded-full h-11"
                       disabled={loading}
                       data-ocid="login.submit_button"
                     >
@@ -231,7 +303,7 @@ export default function LoginPage() {
 
             {/* Doctor tab */}
             <TabsContent value="doctor">
-              <div className="max-w-sm mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+              <div className="max-w-sm mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
                 <div className="flex flex-col items-center mb-6">
                   <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                     <Stethoscope className="w-8 h-8 text-blue-600" />
@@ -253,7 +325,7 @@ export default function LoginPage() {
                       <Input
                         id="doctor-code"
                         className="pl-9 font-mono tracking-widest"
-                        placeholder="DOC001"
+                        placeholder="DOC-00001"
                         value={doctorCode}
                         onChange={(e) => setDoctorCode(e.target.value)}
                         data-ocid="login.input"
@@ -265,7 +337,7 @@ export default function LoginPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="doctor-phone" className="text-gray-700">
-                      Phone Number
+                      Phone Number (Password)
                     </Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -273,17 +345,19 @@ export default function LoginPage() {
                         id="doctor-phone"
                         type="password"
                         className="pl-9"
-                        placeholder="Enter phone number"
+                        placeholder="Enter your registered phone number"
+                        value={doctorPassword}
+                        onChange={(e) => setDoctorPassword(e.target.value)}
                         data-ocid="login.input"
                       />
                     </div>
-                  </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700">
-                    Demo codes: DOC001, DOC002, DOC003
+                    <p className="text-xs text-gray-400">
+                      Your password is the phone number registered by the admin
+                    </p>
                   </div>
                   <Button
                     type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700 rounded-full h-10"
+                    className="w-full bg-blue-600 hover:bg-blue-700 rounded-full h-11"
                     disabled={loading}
                     data-ocid="login.submit_button"
                   >
@@ -302,7 +376,7 @@ export default function LoginPage() {
 
             {/* Admin tab */}
             <TabsContent value="admin">
-              <div className="max-w-sm mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+              <div className="max-w-sm mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
                 <div className="flex flex-col items-center mb-6">
                   <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                     <ShieldCheck className="w-8 h-8 text-slate-600" />
@@ -334,9 +408,38 @@ export default function LoginPage() {
                       Demo code: ADMIN-001
                     </p>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="admin-password" className="text-gray-700">
+                      Password
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                      <Input
+                        id="admin-password"
+                        type={showAdminPassword ? "text" : "password"}
+                        className="pl-9 pr-9"
+                        placeholder="Enter admin password"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        data-ocid="login.admin_password"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                        onClick={() => setShowAdminPassword((v) => !v)}
+                        tabIndex={-1}
+                      >
+                        {showAdminPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                   <Button
                     type="submit"
-                    className="w-full rounded-full h-10"
+                    className="w-full rounded-full h-11"
                     disabled={loading}
                     data-ocid="login.submit_button"
                   >

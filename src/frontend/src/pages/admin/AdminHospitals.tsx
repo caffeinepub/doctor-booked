@@ -29,11 +29,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Building2, ImageIcon, Plus, Trash2 } from "lucide-react";
+import {
+  Building2,
+  Edit2,
+  ImageIcon,
+  Plus,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useStore } from "../../context/StoreContext";
 import type { Hospital } from "../../types";
+
+type EditHospitalForm = {
+  name: string;
+  area: string;
+  address: string;
+  phone: string;
+};
 
 export default function AdminHospitals() {
   const {
@@ -42,11 +56,23 @@ export default function AdminHospitals() {
     addHospital,
     deleteHospital,
     updateHospitalPhoto,
+    updateHospital,
   } = useStore();
   const [addOpen, setAddOpen] = useState(false);
   const [photoDialogId, setPhotoDialogId] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState("");
+  const [selectedFileName, setSelectedFileName] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
   const [form, setForm] = useState({
+    name: "",
+    area: "",
+    address: "",
+    phone: "",
+  });
+
+  // Edit hospital state
+  const [editHospital, setEditHospital] = useState<Hospital | null>(null);
+  const [editForm, setEditForm] = useState<EditHospitalForm>({
     name: "",
     area: "",
     address: "",
@@ -95,6 +121,58 @@ export default function AdminHospitals() {
     toast.success("Photo updated");
     setPhotoDialogId(null);
     setPhotoUrl("");
+    setSelectedFileName("");
+  }
+
+  function openEditHospital(hospital: Hospital) {
+    setEditHospital(hospital);
+    setEditForm({
+      name: hospital.name,
+      area: hospital.area,
+      address: hospital.address ?? "",
+      phone: hospital.phone ?? "",
+    });
+  }
+
+  function handleEditHospital() {
+    if (!editHospital) return;
+    if (!editForm.name || !editForm.area) {
+      toast.error("Name and location are required");
+      return;
+    }
+    updateHospital(editHospital.id, {
+      name: editForm.name,
+      area: editForm.area,
+      address: editForm.address,
+      phone: editForm.phone,
+    });
+    toast.success("Hospital updated");
+    setEditHospital(null);
+  }
+
+  function readFileAsDataUrl(file: File) {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    setSelectedFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPhotoUrl((e.target?.result as string) ?? "");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleFileDrop(e: React.DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) readFileAsDataUrl(file);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) readFileAsDataUrl(file);
   }
 
   return (
@@ -182,6 +260,14 @@ export default function AdminHospitals() {
         </Dialog>
       </div>
 
+      <div className="flex items-center gap-2 px-1 py-2 text-sm text-muted-foreground bg-muted/30 rounded-lg border border-border/50">
+        <span>✏️</span>
+        <span>
+          Click the edit icon in the Actions column to modify hospital details.
+          Changes are saved immediately.
+        </span>
+      </div>
+
       <div
         className="rounded-xl border border-border overflow-hidden bg-card"
         data-ocid="admin.table"
@@ -229,9 +315,18 @@ export default function AdminHospitals() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => openEditHospital(hospital)}
+                      data-ocid="admin.edit_button"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => {
                         setPhotoDialogId(hospital.id);
                         setPhotoUrl(hospital.photoUrl ?? "");
+                        setSelectedFileName("");
                       }}
                       data-ocid="admin.button"
                     >
@@ -280,10 +375,85 @@ export default function AdminHospitals() {
         </Table>
       </div>
 
+      {/* Edit Hospital Dialog */}
+      <Dialog
+        open={!!editHospital}
+        onOpenChange={(open) => !open && setEditHospital(null)}
+      >
+        <DialogContent data-ocid="admin.dialog">
+          <DialogHeader>
+            <DialogTitle>Edit Hospital: {editHospital?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Hospital Name *</Label>
+              <Input
+                placeholder="e.g. City General Hospital"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, name: e.target.value }))
+                }
+                data-ocid="admin.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Location / Area *</Label>
+              <Input
+                placeholder="e.g. Downtown"
+                value={editForm.area}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, area: e.target.value }))
+                }
+                data-ocid="admin.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Full Address</Label>
+              <Input
+                placeholder="e.g. 45 Central Avenue"
+                value={editForm.address}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, address: e.target.value }))
+                }
+                data-ocid="admin.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phone</Label>
+              <Input
+                placeholder="e.g. +91 22 4567 8900"
+                value={editForm.phone}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, phone: e.target.value }))
+                }
+                data-ocid="admin.input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditHospital(null)}
+              data-ocid="admin.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleEditHospital} data-ocid="admin.save_button">
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Photo dialog */}
       <Dialog
         open={!!photoDialogId}
-        onOpenChange={(open) => !open && setPhotoDialogId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPhotoDialogId(null);
+            setSelectedFileName("");
+          }
+        }}
       >
         <DialogContent data-ocid="admin.dialog">
           <DialogHeader>
@@ -293,24 +463,62 @@ export default function AdminHospitals() {
             {photoUrl && (
               <img
                 src={photoUrl}
-                alt="Hospital"
+                alt="Hospital preview"
                 className="w-full h-40 object-cover rounded-lg"
               />
             )}
-            <div className="space-y-1.5">
-              <Label>Photo URL</Label>
-              <Input
-                placeholder="https://example.com/hospital.jpg"
-                value={photoUrl}
-                onChange={(e) => setPhotoUrl(e.target.value)}
-                data-ocid="admin.input"
+
+            {/* Drop zone — label wraps hidden input for native click-to-browse */}
+            <label
+              htmlFor="hospital-photo-upload"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleFileDrop}
+              data-ocid="admin.dropzone"
+              className={`flex flex-col items-center justify-center gap-2 w-full rounded-lg border-2 border-dashed cursor-pointer transition-colors py-8 px-4 ${
+                isDragOver
+                  ? "border-primary bg-primary/10"
+                  : "border-muted-foreground/30 bg-muted/30 hover:border-primary/60 hover:bg-muted/50"
+              }`}
+            >
+              <UploadCloud
+                className={`w-8 h-8 ${
+                  isDragOver ? "text-primary" : "text-muted-foreground"
+                }`}
               />
-            </div>
+              {selectedFileName ? (
+                <p className="text-sm font-medium text-foreground text-center break-all">
+                  {selectedFileName}
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-foreground">
+                    Drop image here
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    or click to browse
+                  </p>
+                </>
+              )}
+              <input
+                id="hospital-photo-upload"
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={handleFileChange}
+              />
+            </label>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setPhotoDialogId(null)}
+              onClick={() => {
+                setPhotoDialogId(null);
+                setSelectedFileName("");
+              }}
               data-ocid="admin.cancel_button"
             >
               Cancel
