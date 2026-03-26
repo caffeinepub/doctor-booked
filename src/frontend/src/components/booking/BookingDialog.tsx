@@ -5,10 +5,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Calendar,
   CheckCircle2,
   Clock,
+  FileText,
   Hash,
   IndianRupee,
   Loader2,
@@ -33,7 +35,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Step = "date" | "session" | "token" | "payment" | "success";
+type Step = "date" | "session" | "token" | "complaint" | "payment" | "success";
 
 export default function BookingDialog({
   doctor,
@@ -54,6 +56,7 @@ export default function BookingDialog({
   const [selectedSession, setSelectedSession] = useState<SessionType | "">("");
   const [paying, setPaying] = useState(false);
   const [tokenNumber, setTokenNumber] = useState(0);
+  const [complaint, setComplaint] = useState("");
 
   const availableDates = useMemo(() => getAvailableDates(), []);
 
@@ -75,7 +78,7 @@ export default function BookingDialog({
   }
 
   function handleConfirm() {
-    setStep("payment");
+    setStep("complaint");
   }
 
   function handlePay() {
@@ -97,6 +100,7 @@ export default function BookingDialog({
         sessionId,
         paymentDone: true,
         status: "confirmed",
+        complaint: complaint.trim() || undefined,
       });
       bookToken(
         sessionId,
@@ -115,6 +119,7 @@ export default function BookingDialog({
     setSelectedDate("");
     setSelectedSession("");
     setTokenNumber(0);
+    setComplaint("");
     onClose();
   }
 
@@ -309,6 +314,51 @@ export default function BookingDialog({
               <p className="text-6xl font-bold text-teal-600 mt-1">
                 {tokenNumber}
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Complaint */}
+        {step === "complaint" && (
+          <div className="space-y-4">
+            <div className="text-center pb-1">
+              <div className="w-12 h-12 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <FileText className="w-6 h-6 text-teal-500" />
+              </div>
+              <h3 className="font-semibold text-gray-900 text-base">
+                What brings you in today?
+              </h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Your doctor will see this before the appointment. This is
+                optional.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Textarea
+                rows={4}
+                placeholder="Describe your symptoms, difficulty, or reason for visit... (optional)"
+                value={complaint}
+                onChange={(e) => setComplaint(e.target.value)}
+                className="resize-none text-sm"
+                data-ocid="booking.textarea"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-full"
+                onClick={() => setStep("payment")}
+                data-ocid="booking.secondary_button"
+              >
+                Skip
+              </Button>
+              <Button
+                className="flex-1 bg-teal-500 hover:bg-teal-600 rounded-full"
+                onClick={() => setStep("payment")}
+                data-ocid="booking.primary_button"
+              >
+                Continue to Payment
+              </Button>
             </div>
           </div>
         )}

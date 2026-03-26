@@ -282,6 +282,53 @@ export function useAppStore() {
     });
   }, []);
 
+  // Skip current token: marks as "unvisited" instead of "green", then promotes next
+  const skipToken = useCallback((sessionId: string) => {
+    setTokenStates((prev) => {
+      const state = prev[sessionId];
+      if (!state) return prev;
+
+      const statuses = { ...state.tokenStatuses };
+      let currentToken = state.currentToken;
+      let nextToken = state.nextToken;
+
+      if (currentToken !== null) {
+        statuses[currentToken] = "unvisited";
+      }
+
+      if (nextToken !== null) {
+        statuses[nextToken] = "orange";
+        currentToken = nextToken;
+
+        const reds = Object.entries(statuses)
+          .filter(([n, s]) => s === "red" && Number(n) !== nextToken)
+          .map(([n]) => Number(n))
+          .sort((a, b) => a - b);
+
+        if (reds[0] !== undefined) {
+          statuses[reds[0]] = "yellow";
+          nextToken = reds[0];
+        } else {
+          nextToken = null;
+        }
+      } else {
+        currentToken = null;
+      }
+
+      const updated = {
+        ...prev,
+        [sessionId]: {
+          ...state,
+          tokenStatuses: statuses,
+          currentToken,
+          nextToken,
+        },
+      };
+      saveLS(LS_TOKEN_STATES, updated);
+      return updated;
+    });
+  }, []);
+
   const closeSession = useCallback((sessionId: string) => {
     setTokenStates((prev) => {
       const state = prev[sessionId];
@@ -517,6 +564,7 @@ export function useAppStore() {
     bookToken,
     regulateToken,
     completeCurrentToken,
+    skipToken,
     closeSession,
     setPrioritySlot,
     cancelSession,

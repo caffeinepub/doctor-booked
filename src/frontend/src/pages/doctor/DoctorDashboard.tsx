@@ -36,12 +36,15 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle,
+  CheckCircle2,
   Clock,
+  FileText,
   Globe,
   Languages,
   Lock,
   Phone,
   Save,
+  SkipForward,
   Stethoscope,
   Upload,
   User,
@@ -68,7 +71,7 @@ import type {
 const TOKEN_CLASSES: Record<string, string> = {
   white: "token-white cursor-pointer hover:opacity-80",
   red: "token-red cursor-pointer hover:opacity-80",
-  orange: "token-orange cursor-pointer",
+  orange: "token-orange cursor-pointer hover:opacity-80",
   yellow: "token-yellow cursor-pointer",
   green: "token-green",
   unvisited: "bg-gray-100 border-2 border-gray-200 text-gray-400",
@@ -95,11 +98,13 @@ export default function DoctorDashboard() {
     getOrCreateTokenState,
     regulateToken,
     completeCurrentToken,
+    skipToken,
     closeSession,
     setPrioritySlot,
     cancelSession,
     isSessionCancelled,
     tokenStates,
+    getBookingsForSession,
   } = useStore();
 
   const doctorUser = user as { doctorId: string; code: string };
@@ -138,6 +143,10 @@ export default function DoctorDashboard() {
     type: "ended" | "cancelled";
     session: string;
   } | null>(null);
+  const [tokenDialog, setTokenDialog] = useState<{
+    open: boolean;
+    tokenNum: number | null;
+  }>({ open: false, tokenNum: null });
 
   const visibleSessions = useMemo(() => {
     if (!doctor) return [];
@@ -156,7 +165,6 @@ export default function DoctorDashboard() {
     ? getOrCreateTokenState(sessionId, doctor.id, regDate, regSession)
     : null;
   const statuses = tokenState?.tokenStatuses ?? {};
-  const currentToken = tokenState?.currentToken ?? null;
   const isClosed = tokenState?.isClosed ?? false;
   const cancelled = doctor
     ? isSessionCancelled(doctor.id, regDate, regSession)
@@ -181,6 +189,21 @@ export default function DoctorDashboard() {
     const times = custom ?? SESSION_TIMES[session];
     return times ? formatTime12h(times.start) : "";
   }
+
+  // Derive info for the token dialog
+  const dialogTokenBooking = useMemo(() => {
+    if (tokenDialog.tokenNum === null) return null;
+    const sessionBookings = getBookingsForSession(sessionId);
+    return (
+      sessionBookings.find((b) => b.tokenNumber === tokenDialog.tokenNum) ??
+      null
+    );
+  }, [tokenDialog.tokenNum, sessionId, getBookingsForSession]);
+
+  const dialogTokenStatus: TokenStatus | null = useMemo(() => {
+    if (tokenDialog.tokenNum === null) return null;
+    return (statuses[tokenDialog.tokenNum] as TokenStatus) ?? "white";
+  }, [tokenDialog.tokenNum, statuses]);
 
   function handleSaveProfile() {
     updateDoctor(doctor.id, {
@@ -262,14 +285,27 @@ export default function DoctorDashboard() {
   function handleTokenClick(tokenNum: number) {
     if (isClosed || !isSessionAccessibleNow) return;
     const st = statuses[tokenNum] as TokenStatus;
-    if (st !== "red" && st !== "yellow") return;
-    regulateToken(sessionId, tokenNum);
-    toast.success(`Token #${tokenNum} is now being seen`);
+    if (st !== "red" && st !== "yellow" && st !== "orange") return;
+    setTokenDialog({ open: true, tokenNum });
   }
 
-  function handleCompleteToken() {
+  function handleMarkAsOngoing() {
+    if (tokenDialog.tokenNum === null) return;
+    regulateToken(sessionId, tokenDialog.tokenNum);
+    toast.success(`Token #${tokenDialog.tokenNum} is now being seen`);
+    setTokenDialog({ open: false, tokenNum: null });
+  }
+
+  function handleMarkCompleted() {
     completeCurrentToken(sessionId);
     toast.success("Token completed, moving to next");
+    setTokenDialog({ open: false, tokenNum: null });
+  }
+
+  function handleSkipToken() {
+    skipToken(sessionId);
+    toast.success("Patient skipped, moving to next token");
+    setTokenDialog({ open: false, tokenNum: null });
   }
 
   function handleCloseSession() {
@@ -316,7 +352,7 @@ export default function DoctorDashboard() {
     for (let n = 1; n <= maxTokens; n++) {
       const st: TokenStatus = (statuses[n] as TokenStatus) ?? "white";
       const isClickable =
-        (st === "red" || st === "yellow") &&
+        (st === "red" || st === "yellow" || st === "orange") &&
         !isClosed &&
         isSessionAccessibleNow;
       elements.push(
@@ -332,9 +368,9 @@ export default function DoctorDashboard() {
           onClick={() => handleTokenClick(n)}
           title={
             st === "orange"
-              ? "Currently seeing"
+              ? "Currently seeing — click to act"
               : st === "yellow"
-                ? "Next up"
+                ? "Next up — click to call"
                 : st === "green"
                   ? "Done"
                   : st === "red"
@@ -512,21 +548,6 @@ export default function DoctorDashboard() {
                     )}
                   </CardTitle>
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* Complete button: only when session is active now */}
-                    {currentToken !== null &&
-                      !isClosed &&
-                      isSessionAccessibleNow && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-green-300 text-green-700 hover:bg-green-50 flex-1 sm:flex-none"
-                          onClick={handleCompleteToken}
-                          data-ocid="tokens.primary_button"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
-                          Complete #{currentToken}
-                        </Button>
-                      )}
                     {/* End Session: only when session is accessible now */}
                     {!isClosed && !cancelled && isSessionAccessibleNow && (
                       <AlertDialog>
@@ -1062,6 +1083,97 @@ export default function DoctorDashboard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Token Action Dialog */}
+      <Dialog
+        open={tokenDialog.open}
+        onOpenChange={(v) => {
+          if (!v) setTokenDialog({ open: false, tokenNum: null });
+        }}
+      >
+        <DialogContent className="max-w-sm" data-ocid="tokens.dialog">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">
+              Token #{tokenDialog.tokenNum}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Patient info */}
+          <div className="space-y-4 py-1">
+            <p className="text-sm text-gray-700">
+              Patient:{" "}
+              <span className="font-semibold">
+                {dialogTokenBooking?.patientName ?? "Walk-in / Unknown"}
+              </span>
+            </p>
+
+            {/* Complaint box */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <FileText className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  Patient Complaint
+                </span>
+              </div>
+              {dialogTokenBooking?.complaint ? (
+                <p className="text-sm text-gray-700">
+                  {dialogTokenBooking.complaint}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-400 italic">
+                  No complaint submitted
+                </p>
+              )}
+            </div>
+
+            {/* Action buttons based on token status */}
+            {dialogTokenStatus === "orange" ? (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">
+                  Status: <span className="font-semibold">Ongoing</span>. Choose
+                  an action:
+                </p>
+                <Button
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold h-11"
+                  onClick={handleMarkCompleted}
+                  data-ocid="tokens.confirm_button"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Mark as Completed
+                </Button>
+                <Button
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold h-11"
+                  onClick={handleSkipToken}
+                  data-ocid="tokens.secondary_button"
+                >
+                  <SkipForward className="w-4 h-4 mr-2" />
+                  Patient Not Available (Skip)
+                </Button>
+              </div>
+            ) : (
+              <Button
+                className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold h-11"
+                onClick={handleMarkAsOngoing}
+                data-ocid="tokens.primary_button"
+              >
+                <Activity className="w-4 h-4 mr-2" />
+                Mark as Ongoing
+              </Button>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTokenDialog({ open: false, tokenNum: null })}
+              data-ocid="tokens.close_button"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Priority Slot Dialog */}
       <Dialog
