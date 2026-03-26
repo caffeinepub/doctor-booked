@@ -240,41 +240,31 @@ export function useAppStore() {
     setTokenStates((prev) => {
       const state = prev[sessionId];
       if (!state) return prev;
-
       const statuses = { ...state.tokenStatuses };
-      let currentToken = state.currentToken;
-      let nextToken = state.nextToken;
-
+      const currentToken = state.currentToken;
+      const nextToken = state.nextToken;
       if (currentToken !== null) {
         statuses[currentToken] = "green";
       }
-
-      if (nextToken !== null) {
-        statuses[nextToken] = "orange";
-        currentToken = nextToken;
-
+      // Do NOT auto-promote next to orange. Keep nextToken as yellow (notification only).
+      let newNextToken = nextToken;
+      if (newNextToken === null) {
         const reds = Object.entries(statuses)
-          .filter(([n, s]) => s === "red" && Number(n) !== nextToken)
+          .filter(([, s]) => s === "red")
           .map(([n]) => Number(n))
           .sort((a, b) => a - b);
-
         if (reds[0] !== undefined) {
           statuses[reds[0]] = "yellow";
-          nextToken = reds[0];
-        } else {
-          nextToken = null;
+          newNextToken = reds[0];
         }
-      } else {
-        currentToken = null;
       }
-
       const updated = {
         ...prev,
         [sessionId]: {
           ...state,
           tokenStatuses: statuses,
-          currentToken,
-          nextToken,
+          currentToken: null,
+          nextToken: newNextToken,
         },
       };
       saveLS(LS_TOKEN_STATES, updated);
@@ -282,52 +272,63 @@ export function useAppStore() {
     });
   }, []);
 
-  // Skip current token: marks as "unvisited" instead of "green", then promotes next
+  // Skip current token: marks as "unvisited" (skipped), does NOT auto-promote next
   const skipToken = useCallback((sessionId: string) => {
     setTokenStates((prev) => {
       const state = prev[sessionId];
       if (!state) return prev;
-
       const statuses = { ...state.tokenStatuses };
-      let currentToken = state.currentToken;
-      let nextToken = state.nextToken;
-
+      const currentToken = state.currentToken;
+      const nextToken = state.nextToken;
       if (currentToken !== null) {
         statuses[currentToken] = "unvisited";
       }
-
-      if (nextToken !== null) {
-        statuses[nextToken] = "orange";
-        currentToken = nextToken;
-
+      // Do NOT auto-promote next to orange. Keep nextToken as yellow.
+      let newNextToken = nextToken;
+      if (newNextToken === null) {
         const reds = Object.entries(statuses)
-          .filter(([n, s]) => s === "red" && Number(n) !== nextToken)
+          .filter(([, s]) => s === "red")
           .map(([n]) => Number(n))
           .sort((a, b) => a - b);
-
         if (reds[0] !== undefined) {
           statuses[reds[0]] = "yellow";
-          nextToken = reds[0];
-        } else {
-          nextToken = null;
+          newNextToken = reds[0];
         }
-      } else {
-        currentToken = null;
       }
-
       const updated = {
         ...prev,
         [sessionId]: {
           ...state,
           tokenStatuses: statuses,
-          currentToken,
-          nextToken,
+          currentToken: null,
+          nextToken: newNextToken,
         },
       };
       saveLS(LS_TOKEN_STATES, updated);
       return updated;
     });
   }, []);
+
+  // Mark a previously skipped token as completed when patient arrives later
+  const completeSkippedToken = useCallback(
+    (sessionId: string, tokenNum: number) => {
+      setTokenStates((prev) => {
+        const state = prev[sessionId];
+        if (!state) return prev;
+        const statuses = { ...state.tokenStatuses };
+        if (statuses[tokenNum] === "unvisited") {
+          statuses[tokenNum] = "green";
+        }
+        const updated = {
+          ...prev,
+          [sessionId]: { ...state, tokenStatuses: statuses },
+        };
+        saveLS(LS_TOKEN_STATES, updated);
+        return updated;
+      });
+    },
+    [],
+  );
 
   const closeSession = useCallback((sessionId: string) => {
     setTokenStates((prev) => {
@@ -565,6 +566,7 @@ export function useAppStore() {
     regulateToken,
     completeCurrentToken,
     skipToken,
+    completeSkippedToken,
     closeSession,
     setPrioritySlot,
     cancelSession,

@@ -74,7 +74,8 @@ const TOKEN_CLASSES: Record<string, string> = {
   orange: "token-orange cursor-pointer hover:opacity-80",
   yellow: "token-yellow cursor-pointer",
   green: "token-green",
-  unvisited: "bg-gray-100 border-2 border-gray-200 text-gray-400",
+  unvisited:
+    "bg-purple-100 border-2 border-purple-300 text-purple-700 cursor-pointer hover:opacity-80",
 };
 
 const PRIORITY_STATUS_CLASSES: Record<string, string> = {
@@ -99,6 +100,7 @@ export default function DoctorDashboard() {
     regulateToken,
     completeCurrentToken,
     skipToken,
+    completeSkippedToken,
     closeSession,
     setPrioritySlot,
     cancelSession,
@@ -285,7 +287,13 @@ export default function DoctorDashboard() {
   function handleTokenClick(tokenNum: number) {
     if (isClosed || !isSessionAccessibleNow) return;
     const st = statuses[tokenNum] as TokenStatus;
-    if (st !== "red" && st !== "yellow" && st !== "orange") return;
+    if (
+      st !== "red" &&
+      st !== "yellow" &&
+      st !== "orange" &&
+      st !== "unvisited"
+    )
+      return;
     setTokenDialog({ open: true, tokenNum });
   }
 
@@ -305,6 +313,13 @@ export default function DoctorDashboard() {
   function handleSkipToken() {
     skipToken(sessionId);
     toast.success("Patient skipped, moving to next token");
+    setTokenDialog({ open: false, tokenNum: null });
+  }
+
+  function handleCompleteSkipped() {
+    if (tokenDialog.tokenNum === null) return;
+    completeSkippedToken(sessionId, tokenDialog.tokenNum);
+    toast.success(`Token #${tokenDialog.tokenNum} marked as completed`);
     setTokenDialog({ open: false, tokenNum: null });
   }
 
@@ -352,7 +367,10 @@ export default function DoctorDashboard() {
     for (let n = 1; n <= maxTokens; n++) {
       const st: TokenStatus = (statuses[n] as TokenStatus) ?? "white";
       const isClickable =
-        (st === "red" || st === "yellow" || st === "orange") &&
+        (st === "red" ||
+          st === "yellow" ||
+          st === "orange" ||
+          st === "unvisited") &&
         !isClosed &&
         isSessionAccessibleNow;
       elements.push(
@@ -687,6 +705,7 @@ export default function DoctorDashboard() {
                           ["#ef4444", "Booked"],
                           ["#f97316", "Ongoing"],
                           ["#22c55e", "Done"],
+                          ["#7c3aed", "Skipped"],
                         ] as [string, string][]
                       ).map(([color, label]) => (
                         <div key={label} className="flex items-center gap-1.5">
@@ -1148,6 +1167,22 @@ export default function DoctorDashboard() {
                 >
                   <SkipForward className="w-4 h-4 mr-2" />
                   Patient Not Available (Skip)
+                </Button>
+              </div>
+            ) : dialogTokenStatus === "unvisited" ? (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">
+                  Status:{" "}
+                  <span className="font-semibold text-purple-700">Skipped</span>
+                  . Patient was previously unavailable.
+                </p>
+                <Button
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold h-11"
+                  onClick={handleCompleteSkipped}
+                  data-ocid="tokens.confirm_button"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Mark as Completed (Patient Arrived)
                 </Button>
               </div>
             ) : (
