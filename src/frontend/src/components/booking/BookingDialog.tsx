@@ -385,8 +385,7 @@ export default function BookingDialog({
                 onClick={handlePay}
                 data-ocid="booking.primary_button"
               >
-                <IndianRupee className="w-4 h-4 mr-1" />
-                Pay ₹{doctor.price}
+                Pay
               </Button>
             )}
           </div>
