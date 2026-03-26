@@ -28,6 +28,8 @@ import {
 } from "../../data/seed";
 import type { Doctor, Hospital, SessionType } from "../../types";
 
+const STANDARD_FEE = 10;
+
 interface Props {
   doctor: Doctor;
   hospital: Hospital;
@@ -293,10 +295,6 @@ export default function BookingDialog({
                       doctor.sessionTimings,
                     )}
                   </p>
-                  <div className="flex items-center gap-1 mt-2 text-gray-700 font-semibold">
-                    <IndianRupee className="w-3.5 h-3.5 text-teal-600" />
-                    {doctor.price}
-                  </div>
                 </div>
                 <button
                   type="button"
@@ -367,10 +365,10 @@ export default function BookingDialog({
         {step === "payment" && (
           <div className="space-y-4 text-center">
             <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-sm text-gray-500 mb-1">Amount to Pay</p>
+              <p className="text-sm text-gray-500 mb-1">Consultation Fee</p>
               <div className="flex items-center justify-center gap-1 text-3xl font-bold text-gray-900">
                 <IndianRupee className="w-6 h-6" />
-                {doctor.price}
+                {STANDARD_FEE}
               </div>
             </div>
             {paying ? (
