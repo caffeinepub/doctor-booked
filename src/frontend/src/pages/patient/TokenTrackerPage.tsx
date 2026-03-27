@@ -5,6 +5,7 @@ import {
   Clock,
   Stethoscope,
 } from "lucide-react";
+import { useEffect } from "react";
 import { useStore } from "../../context/StoreContext";
 import { SESSION_TIMES } from "../../data/seed";
 import { useRouter } from "../../router/RouterContext";
@@ -35,7 +36,12 @@ interface Props {
 
 export default function TokenTrackerPage({ sessionId, tokenNumber }: Props) {
   const { goBack } = useRouter();
-  const { tokenStates, bookings, doctors } = useStore();
+  const { tokenStates, bookings, doctors, refreshFromStorage } = useStore();
+
+  useEffect(() => {
+    const id = setInterval(refreshFromStorage, 10000);
+    return () => clearInterval(id);
+  }, [refreshFromStorage]);
 
   const booking = bookings.find(
     (b) => b.sessionId === sessionId && b.tokenNumber === tokenNumber,
@@ -119,11 +125,11 @@ export default function TokenTrackerPage({ sessionId, tokenNumber }: Props) {
         {/* Top row */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+            <span className="animate-pulse bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
               LIVE
             </span>
             <span className="text-xs text-gray-400">
-              Updates every 4 seconds
+              Updates every 10 seconds
             </span>
           </div>
           <button
