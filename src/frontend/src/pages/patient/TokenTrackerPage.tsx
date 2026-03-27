@@ -39,7 +39,7 @@ export default function TokenTrackerPage({ sessionId, tokenNumber }: Props) {
   const { tokenStates, bookings, doctors, refreshFromStorage } = useStore();
 
   useEffect(() => {
-    const id = setInterval(refreshFromStorage, 10000);
+    const id = setInterval(refreshFromStorage, 5000);
     return () => clearInterval(id);
   }, [refreshFromStorage]);
 
@@ -129,7 +129,7 @@ export default function TokenTrackerPage({ sessionId, tokenNumber }: Props) {
               LIVE
             </span>
             <span className="text-xs text-gray-400">
-              Updates every 10 seconds
+              Updates every 5 seconds
             </span>
           </div>
           <button
