@@ -1,9 +1,9 @@
 import {
+  Activity,
   ArrowLeft,
   Calendar,
   CheckCircle,
   Clock,
-  Stethoscope,
 } from "lucide-react";
 import { useEffect } from "react";
 import { useStore } from "../../context/StoreContext";
@@ -148,7 +148,7 @@ export default function TokenTrackerPage({ sessionId, tokenNumber }: Props) {
             {booking && (
               <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-gray-500">
                 <span className="flex items-center gap-1">
-                  <Stethoscope className="w-3.5 h-3.5" />
+                  <Activity className="w-3.5 h-3.5" />
                   {booking.doctorName}
                 </span>
                 <span className="flex items-center gap-1">
@@ -207,7 +207,7 @@ export default function TokenTrackerPage({ sessionId, tokenNumber }: Props) {
             label: "Now Seeing",
           },
           {
-            icon: <Stethoscope className="w-4 h-4 text-blue-600" />,
+            icon: <Activity className="w-4 h-4 text-blue-600" />,
             bg: "bg-blue-100",
             value: tokensAhead,
             label: "Tokens Ahead",
